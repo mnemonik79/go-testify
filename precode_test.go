@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -11,73 +10,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var cafeList = map[string][]string{
-	"moscow": []string{"Мир кофе", "Сладкоежка", "Кофе и завтраки", "Сытый студент"},
-}
+func TestMainHandlerWhenStatusAndBodyOk(t *testing.T) {
+	req := httptest.NewRequest("GET", "/cafe?count=4&city=moscow", nil)
 
-func mainHandle(w http.ResponseWriter, req *http.Request) {
-	countStr := req.URL.Query().Get("count")
-	if countStr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("count missing"))
-		return
-	}
+	responseRecorder := httptest.NewRecorder()
+	handler := http.HandlerFunc(mainHandle)
+	handler.ServeHTTP(responseRecorder, req)
 
-	count, err := strconv.Atoi(countStr)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("wrong count value"))
-		return
-	}
+	require.Equal(t, responseRecorder.Code, http.StatusOK)
 
-	city := req.URL.Query().Get("city")
+	body := responseRecorder.Body.String()
+	require.NotEmpty(t, body)
 
-	cafe, ok := cafeList[city]
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("wrong city value"))
-		return
-	}
-
-	if count > len(cafe) {
-		count = len(cafe)
-	}
-
-	answer := strings.Join(cafe[:count], ",")
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(answer))
 }
 
 func TestMainHandlerWhenCountMoreThanTotal(t *testing.T) {
 	totalCount := 4
-	req := httptest.NewRequest("GET", "/cafe?count=10&city=moscow", nil) // здесь нужно создать запрос к сервису
+	req := httptest.NewRequest("GET", "/cafe?count=5&city=moscow", nil)
 
 	responseRecorder := httptest.NewRecorder()
 	handler := http.HandlerFunc(mainHandle)
 	handler.ServeHTTP(responseRecorder, req)
 
-	// здесь нужно добавить необходимые проверки
-	assert.Equal(t, http.StatusOK, responseRecorder.Code, "expected status code 200")
-
 	body := responseRecorder.Body.String()
-	assert.NotEmpty(t, body, "Body not be empty")
-
-	list := strings.Split(body, ",")
-
-	assert.Equal(t, totalCount, len(list), "expected cafe")
+	cafes := strings.Split(body, ",")
+	assert.Len(t, cafes, totalCount)
 }
 
-func TestMainHandlerWhenCityUknown(t *testing.T) {
-	req := httptest.NewRequest("GET", "/cafe?count=4&city=unknown", nil)
+func TestMainHandlerWhenWrongCity(t *testing.T) {
+	req := httptest.NewRequest("GET", "/cafe?count=4&city=moskau", nil)
 
 	responseRecorder := httptest.NewRecorder()
 	handler := http.HandlerFunc(mainHandle)
 	handler.ServeHTTP(responseRecorder, req)
 
-	require.Equal(t, http.StatusBadRequest, responseRecorder.Code, "expected status code 400")
+	require.Equal(t, responseRecorder.Code, http.StatusBadRequest)
 
+	expectedMsg := "wrong city value"
 	body := responseRecorder.Body.String()
-
-	assert.Equal(t, "wrong city value", body, "expected error message for wrong city value")
+	assert.Equal(t, body, expectedMsg)
 }
